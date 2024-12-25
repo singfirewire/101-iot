@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Timer Relay Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --danger-color: #f44336;
+            --success-color: #4CAF50;
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
+        body {
+            font-family: 'Kanit', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+
+        .relay-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .relay-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .relay-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .relay-card h2 {
+            margin: 0 0 20px 0;
+            color: var(--text-color);
+            font-size: 1.5em;
+            font-weight: 500;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .control-button {
+            width: 100%;
+            max-width: 200px;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            font-family: 'Kanit', sans-serif;
+            font-size: 1.2em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .control-button.on {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .control-button.off {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .control-button:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+
+        .control-button:active {
+            transform: translateY(0);
+        }
+
+        .connection-status {
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.1em;
+            transition: all 0.3s;
+        }
+
+        .connected {
+            background-color: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .disconnected {
+            background-color: rgba(244, 67, 54, 0.1);
+            color: var(--danger-color);
+            border: 1px solid var(--danger-color);
+        }
+
+        .timer-display {
+            font-size: 2.5em;
+            font-weight: 500;
+            text-align: center;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+
+        .timer-display.active {
+            color: var(--success-color);
+        }
+
+        .timer-display.inactive {
+            color: var(--danger-color);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .active-timer {
+            animation: pulse 2s infinite;
+        }
+
+        /* Toggle Switch Style */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .toggle-label {
+            font-size: 1em;
+            color: var(--text-color);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px; /* ปรับขนาดสวิตช์ให้เล็กลง */
+            height: 24px; /* ปรับขนาดสวิตช์ให้เล็กลง */
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px; /* ปรับขนาดสวิตช์ให้เล็กลง */
+            width: 20px; /* ปรับขนาดสวิตช์ให้เล็กลง */
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--success-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(16px); /* ปรับตำแหน่งสวิตช์ให้เล็กลง */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ESP32 Timer Relay Control</h1>
+        <div id="connectionStatus" class="connection-status disconnected">
+            กำลังเชื่อมต่อ MQTT...
+        </div>
+        
+        <div class="relay-grid">
+            <!-- Relay 1 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 1 (GPIO 4)</h2>
+                <div class="timer-display inactive" id="relay1Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer1Toggle" checked onchange="toggleTimer(1, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay1Button" onclick="toggleRelay(1)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 2 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 2 (GPIO 5)</h2>
+                <div class="timer-display inactive" id="relay2Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer2Toggle" checked onchange="toggleTimer(2, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay2Button" onclick="toggleRelay(2)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 3 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 3 (GPIO 12)</h2>
+                <div class="timer-display inactive" id="relay3Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer3Toggle" checked onchange="toggleTimer(3, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay3Button" onclick="toggleRelay(3)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 4 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 4 (GPIO 13)</h2>
+                <div class="timer-display inactive" id="relay4Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer4Toggle" checked onchange="toggleTimer(4, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay4Button" onclick="toggleRelay(4)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 5 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 5 (GPIO 14)</h2>
+                <div class="timer-display inactive" id="relay5Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer5Toggle" checked onchange="toggleTimer(5, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay5Button" onclick="toggleRelay(5)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 6 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 6 (GPIO 15)</h2>
+                <div class="timer-display inactive" id="relay6Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer6Toggle" checked onchange="toggleTimer(6, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay6Button" onclick="toggleRelay(6)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 7 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 7 (GPIO 16)</h2>
+                <div class="timer-display inactive" id="relay7Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer7Toggle" checked onchange="toggleTimer(7, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay7Button" onclick="toggleRelay(7)">เปิด</button>
+                </div>
+            </div>
+
+            <!-- Relay 8 -->
+            <div class="relay-card">
+                <h2>รีเลย์ 8 (GPIO 17)</h2>
+                <div class="timer-display inactive" id="relay8Timer">00:00</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">นับเวลาถอยหลัง</span>
+                    <label class="switch">
+                        <input type="checkbox" id="timer8Toggle" checked onchange="toggleTimer(8, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button class="control-button on" id="relay8Button" onclick="toggleRelay(8)">เปิด</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const mqttServer = 'test.mosquitto.org';
+        const mqttPort = 8081;
+        const deviceId = 'web_client_' + Math.random().toString(16).substr(2, 8);
+        
+        const topicPrefix = 'iot/timer-relay/';
+        const topics = {
+            relay1Control: topicPrefix + 'relay1/control',
+            relay2Control: topicPrefix + 'relay2/control',
+            relay3Control: topicPrefix + 'relay3/control',
+            relay4Control: topicPrefix + 'relay4/control',
+            relay5Control: topicPrefix + 'relay5/control',
+            relay6Control: topicPrefix + 'relay6/control',
+            relay7Control: topicPrefix + 'relay7/control',
+            relay8Control: topicPrefix + 'relay8/control',
+            status: topicPrefix + 'status',
+            command: topicPrefix + 'command'
+        };
+
+        // Timer state
+        let timerEnabled = {
+            1: true,
+            2: true,
+            3: true,
+            4: true,
+            5: true,
+            6: true,
+            7: true,
+            8: true
+        };
+
+        const client = mqtt.connect(`wss://${mqttServer}:${mqttPort}`, {
+            clientId: deviceId,
+            clean: true,
+            reconnectPeriod: 3000,
+            connectTimeout: 30 * 1000
+        });
+
+        client.on('connect', () => {
+            console.log('Connected to MQTT broker');
+            document.getElementById('connectionStatus').className = 'connection-status connected';
+            document.getElementById('connectionStatus').innerHTML = 'เชื่อมต่อ MQTT สำเร็จ';
+            client.subscribe(topics.status);
+            requestStatus();
+        });
+
+        client.on('message', (topic, message) => {
+            console.log('Received:', topic, message.toString());
+            if (topic === topics.status) {
+                try {
+                    updateStatus(JSON.parse(message.toString()));
+                } catch (e) {
+                    console.error('Error parsing status:', e);
+                }
+            }
+        });
+
+        client.on('error', (error) => {
+            console.error('MQTT Error:', error);
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionStatus').innerHTML = 'การเชื่อมต่อผิดพลาด: ' + error.message;
+        });
+
+        client.on('offline', () => {
+            console.log('MQTT Connection offline');
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionStatus').innerHTML = 'ขาดการเชื่อมต่อ';
+        });
+
+        client.on('reconnect', () => {
+            console.log('Trying to reconnect...');
+            document.getElementById('connectionStatus').innerHTML = 'กำลังพยายามเชื่อมต่อใหม่...';
+        });
+
+        function toggleTimer(relayNumber, enabled) {
+            timerEnabled[relayNumber] = enabled;
+            const topic = topics[`relay${relayNumber}Control`];
+            const message = JSON.stringify({
+                action: 'TIMER_MODE',
+                enabled: enabled
+            });
+            client.publish(topic, message);
+        }
+
+        function toggleRelay(relayNumber) {
+            const button = document.getElementById(`relay${relayNumber}Button`);
+            const currentState = button.textContent === 'เปิด' ? 'OFF' : 'ON';
+            const action = currentState === 'OFF' ? 'ON' : 'OFF';
+            const topic = topics[`relay${relayNumber}Control`];
+            
+            const message = JSON.stringify({
+                action: action,
+                timerEnabled: timerEnabled[relayNumber]
+            });
+            client.publish(topic, message);
+        }
+
+        function requestStatus() {
+            client.publish(topics.command, JSON.stringify({
+                command: 'status'
+            }));
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        function updateRelayStatus(relayNumber, relayStatus) {
+            if (!relayStatus) return;
+
+            const timerElement = document.getElementById(`relay${relayNumber}Timer`);
+            const buttonElement = document.getElementById(`relay${relayNumber}Button`);
+            const timerToggle = document.getElementById(`timer${relayNumber}Toggle`);
+
+            if (relayStatus.active) {
+                timerElement.className = 'timer-display active';
+                buttonElement.textContent = 'ปิด';
+                buttonElement.className = 'control-button off';
+
+                if (relayStatus.remaining !== undefined && timerEnabled[relayNumber]) {
+                    timerElement.textContent = formatTime(relayStatus.remaining);
+                    timerElement.classList.add('active-timer');
+                }
+            } else {
+                timerElement.className = 'timer-display inactive';
+                buttonElement.textContent = 'เปิด';
+                buttonElement.className = 'control-button on';
+                timerElement.textContent = '00:00';
+                timerElement.classList.remove('active-timer');
+            }
+
+            if (relayStatus.timerEnabled !== undefined) {
+                timerToggle.checked = relayStatus.timerEnabled;
+                timerEnabled[relayNumber] = relayStatus.timerEnabled;
+            }
+        }
+
+        function updateStatus(status) {
+            for (let i = 1; i <= 8; i++) {
+                updateRelayStatus(i, status[`relay${i}`]);
+            }
+        }
+
+        setInterval(requestStatus, 1000);
+    </script>
+</body>
+</html>

@@ -351,3 +351,119 @@ void setup() {
 
 void loop() {
     unsigned long currentMillis = millis();
+
+    // MQTT Connection Management
+    if (!mqtt.connected()) {
+        if (currentMillis - lastMqttReconnectAttempt >= MQTT_RECONNECT_INTERVAL) {
+            lastMqttReconnectAttempt = currentMillis;
+            Serial.println("Attempting MQTT reconnection...");
+            if (reconnectMQTT()) {
+                lastMqttReconnectAttempt = 0;
+                Serial.println("MQTT reconnected");
+            }
+        }
+    } else {
+        mqtt.loop();
+    }
+
+    // Switch 1 handling
+    bool switch1Reading = digitalRead(SWITCH1_PIN);
+    if (switch1Reading != switch1LastState) {
+        lastDebounceTime1 = currentMillis;
+    }
+
+    if ((currentMillis - lastDebounceTime1) > DEBOUNCE_DELAY) {
+        if (switch1Reading == LOW && !switch1LongPress) {
+            if (switch1PressStart == 0) {
+                switch1PressStart = currentMillis;
+            }
+
+            if ((currentMillis - switch1PressStart) >= LONG_PRESS_TIME) {
+                if (relay1Active) {
+                    Serial.println("Long press detected - Deactivating relay 1");
+                    activateRelay(1, false);
+                    switch1LongPress = true;
+                }
+            }
+        }
+        else if (switch1Reading == HIGH) {
+            if (!switch1LongPress && switch1PressStart > 0) {
+                handleRelay1(true);
+            }
+            switch1PressStart = 0;
+            switch1LongPress = false;
+        }
+    }
+    switch1LastState = switch1Reading;
+
+    // Switch 2 handling
+    bool switch2Reading = digitalRead(SWITCH2_PIN);
+    if (switch2Reading != switch2LastState) {
+        lastDebounceTime2 = currentMillis;
+    }
+
+    if ((currentMillis - lastDebounceTime2) > DEBOUNCE_DELAY) {
+        if (switch2Reading == LOW && !switch2LongPress) {
+            if (switch2PressStart == 0) {
+                switch2PressStart = currentMillis;
+            }
+
+            if ((currentMillis - switch2PressStart) >= LONG_PRESS_TIME) {
+                if (relay2Active) {
+                    Serial.println("Long press detected - Deactivating relay 2");
+                    activateRelay(2, false);
+                    switch2LongPress = true;
+                }
+            }
+        }
+        else if (switch2Reading == HIGH) {
+            if (!switch2LongPress && switch2PressStart > 0) {
+                handleRelay2(true);
+            }
+            switch2PressStart = 0;
+            switch2LongPress = false;
+        }
+    }
+    switch2LastState = switch2Reading;
+
+    // Timer management for Relay 1
+    if (relay1Active) {
+        unsigned long relay1Elapsed = currentMillis - relay1StartTime;
+        if (relay1Elapsed >= COUNTDOWN_TIME) {
+            Serial.println("Relay 1 timer completed");
+            activateRelay(1, false);
+        } else {
+            // Debug: print remaining time every 5 seconds
+            if (currentMillis % 5000 == 0) {
+                unsigned long remaining = (COUNTDOWN_TIME - relay1Elapsed) / 1000;
+                Serial.printf("Relay 1 remaining: %lu seconds\n", remaining);
+            }
+        }
+    }
+
+    // Timer management for Relay 2
+    if (relay2Active) {
+        unsigned long relay2Elapsed = currentMillis - relay2StartTime;
+        if (relay2Elapsed >= COUNTDOWN_TIME) {
+            Serial.println("Relay 2 timer completed");
+            activateRelay(2, false);
+        } else {
+            // Debug: print remaining time every 5 seconds
+            if (currentMillis % 5000 == 0) {
+                unsigned long remaining = (COUNTDOWN_TIME - relay2Elapsed) / 1000;
+                Serial.printf("Relay 2 remaining: %lu seconds\n", remaining);
+            }
+        }
+    }
+
+    // Update LED status
+    updateLED(currentMillis);
+
+    // Periodic status update
+    if (currentMillis - previousMillis >= CHECK_INTERVAL) {
+        previousMillis = currentMillis;
+        if (mqtt.connected()) {
+            publishStatus();
+        }
+    }
+}
